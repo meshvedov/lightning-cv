@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from getpass import getpass
 import os
 import sys
 import argparse
@@ -18,7 +19,7 @@ from lightning.pytorch import seed_everything
 from dataclasses import dataclass, asdict, field
 from clearml import Task
 
-#torch.set_float32_matmul_precision('medium')
+torch.set_float32_matmul_precision('medium')
 
 @dataclass
 class CFG:
@@ -60,7 +61,7 @@ class MNISTDataModule(LightningDataModule):
         return DataLoader(self.mnist_train, batch_size=self.batch_size, shuffle=True, num_workers=20)
 
 
-class Generator(LightningModule):
+class Generator(nn.Module):
     def __init__(self, noise_dim=100, *args, **kwargs):
         super(Generator, self).__init__()
         kernel_size = kwargs.get('kernel_size', 4)
@@ -87,7 +88,7 @@ class Generator(LightningModule):
         return self.main(x)
         
         
-class Discriminator(LightningModule):
+class Discriminator(nn.Module):
     def __init__(self, *args, **kwargs):
         super(Discriminator, self).__init__()
         kernel_size = kwargs.get('kernel_size', 4)
@@ -119,10 +120,13 @@ class GAN_MNIST_Model(LightningModule):
                  gen_dict=None, 
                  disc_dict=None,
                  debug_epoch=1,
-                 task_clearml = None):
+                 task_clearml = None,
+                 ):
         super().__init__()
-        self.generator = Generator(noise_dim=noise_dim, **(gen_dict or {})).to(self.device)
-        self.discriminator = Discriminator( **(disc_dict or {})).to(self.device)
+        # import pdb; pdb.set_trace()
+        self.dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.generator = Generator(noise_dim=noise_dim, **(gen_dict or {})).to(self.dev)
+        self.discriminator = Discriminator( **(disc_dict or {})).to(self.dev)
         self.criterion = nn.BCELoss()
         
         self.noise_dim = noise_dim
@@ -140,9 +144,10 @@ class GAN_MNIST_Model(LightningModule):
         # import pdb; pdb.set_trace()
         opt_g, opt_d = self.optimizers()
         real_images, _ = batch
+        real_images = real_images.to(self.dev)
         batch_size = real_images.size(0)
-        noise = torch.randn(batch_size, self.noise_dim, device=self.device)
-        label = torch.full((batch_size,), self.real_label, device=self.device)
+        noise = torch.randn(batch_size, self.noise_dim, device=self.dev)
+        label = torch.full((batch_size,), self.real_label, device=self.dev)
 
         # Обучение генератора
         opt_g.zero_grad()
@@ -190,7 +195,7 @@ class GAN_MNIST_Model(LightningModule):
             
     def on_train_epoch_end(self):
         if self.current_epoch % self.debug_epoch == 0:
-            fixed_noise = torch.randn(64, self.noise_dim, device=self.device)
+            fixed_noise = torch.randn(64, self.noise_dim, device=self.dev)
             fake_images = self(fixed_noise).detach().cpu()
             os.makedirs('output', exist_ok=True)
             torchvision.utils.save_image(fake_images, f'output/fake_images_epoch_{self.current_epoch}.png', normalize=True)
@@ -238,7 +243,7 @@ def main(epochs, debug_samples_epoch, fast_dev_run, clearml):
                             disc_dict=cfg.disc_dict, 
                             noise_dim=cfg.noise_dim,
                             debug_epoch=debug_samples_epoch,
-                            task_clearml=task)
+                            task_clearml=task,)
     
     try:
         if fast_dev_run:
@@ -248,11 +253,10 @@ def main(epochs, debug_samples_epoch, fast_dev_run, clearml):
             return
         
         trainer = Trainer(
-        #accelerator='auto',
-        #devices=-1,
+        accelerator='auto',
+        devices=-1,
         max_epochs=epochs,
         callbacks=[
-            RichProgressBar(leave=True),
             ModelCheckpoint(
                 monitor='D_G_z2',
                 mode='min',
@@ -260,7 +264,7 @@ def main(epochs, debug_samples_epoch, fast_dev_run, clearml):
                 save_weights_only=True,
                 dirpath='models',
                 filename='generator',
-                #enable_version_counter=True,
+                enable_version_counter=True,
             )])
         trainer.fit(model, data)
         
