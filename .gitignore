@@ -3,3 +3,4 @@ data/
 models/
 *.pth
 output/
+.env

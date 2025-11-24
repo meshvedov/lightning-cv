@@ -220,7 +220,7 @@ def check_clearml_env():
         os.environ['CLEARML_API_ACCESS_KEY'] = getpass(prompt="Введите API Access токен: ")
     if os.getenv('CLEARML_API_SECRET_KEY') is None:
         os.environ['CLEARML_API_SECRET_KEY'] = getpass(prompt="Введите API Secret токен: ")
-    
+        
 def main(epochs, debug_samples_epoch, fast_dev_run, clearml):
     cfg = CFG()
     seed_everything(cfg.seed)
@@ -278,7 +278,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Python Lightning script")
     parser.add_argument('--fast_dev_run', type=bool, default=False, help='Run a single batch for quick debugging')
     parser.add_argument('--clearml', type=bool, default=False, help='Use ClearML for logging')
-    parser.add_argument('--epochs', type=int, default=1, help='Run number of epochs')
+    parser.add_argument('--epochs', type=int, default=10, help='Run number of epochs')
     parser.add_argument('--debug_samples_epoch', type=int, default=1, help='Frequency of saving debug samples')
     args = parser.parse_args()
     main(args.epochs, args.debug_samples_epoch, args.fast_dev_run, args.clearml)
